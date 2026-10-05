@@ -1,0 +1,103 @@
+import contextlib
+import io
+import json
+import unittest
+from unittest.mock import patch
+
+import icinga_satellite_health as h
+
+
+class HealthTests(unittest.TestCase):
+    def test_status_matrix(self):
+        cases = [(True, None, True, 'OK'), (True, 0, False, 'OK'),
+                 (True, 9.99, False, 'OK'), (True, 10, False, 'WARNING'),
+                 (True, 30, False, 'CRITICAL'), (False, 0, True, 'WARNING'),
+                 (False, 0, False, 'CRITICAL'), (False, None, None, 'CRITICAL')]
+        for connected, lag, tcp, expected in cases:
+            with self.subTest(connected=connected, lag=lag, tcp=tcp):
+                self.assertEqual(h.calculate_status(connected, lag, tcp, 10, 30)[0], expected)
+
+    def test_native_lag(self):
+        attrs = {'connected': True, 'syncing': False, 'remote_log_position': 20}
+        self.assertEqual(h.cluster_lag(attrs, 100), 0)
+        attrs['syncing'] = True
+        self.assertEqual(h.cluster_lag(attrs, 100), 80)
+        attrs['remote_log_position'] = 0
+        self.assertEqual(h.cluster_lag(attrs, 100), 0)
+        attrs['remote_log_position'] = float('nan')
+        self.assertIsNone(h.cluster_lag(attrs, 100))
+        self.assertIsNone(h.cluster_lag({}, 100))
+
+    def test_aggregation(self):
+        self.assertEqual(h.aggregate_status(['OK', 'WARNING']), 'WARNING')
+        self.assertEqual(h.aggregate_status(['WARNING', 'CRITICAL']), 'CRITICAL')
+        self.assertEqual(h.aggregate_status(['CRITICAL', 'UNKNOWN']), 'UNKNOWN')
+
+    def run_mock(self, endpoints, zones, extra=None):
+        with patch.object(h, 'credentials', return_value=('user', 'secret')), \
+             patch.object(h, 'IcingaAPI') as api, patch.object(h, 'test_tcp') as tcp:
+            api.return_value.endpoints.return_value = endpoints
+            api.return_value.zones.return_value = zones
+            result = h.run_check(h.parse_args(['--no-tcp'] + (extra or [])))
+            tcp.assert_not_called()
+            return result
+
+    def fixtures(self):
+        endpoints, zones = {}, {}
+        for satellites in h.SATELLITES.values():
+            for s in satellites:
+                endpoints[s['endpoint']] = {'connected': True}
+                zones.setdefault(s['zone'], {'endpoints': []})['endpoints'].append(s['endpoint'])
+        return endpoints, zones
+
+    def test_all_connected_without_lag_and_tcp(self):
+        report = self.run_mock(*self.fixtures())
+        self.assertEqual(report['status'], 'OK')
+        self.assertEqual(set(report['regions']), {'EMEA', 'APAC', 'AMER'})
+        self.assertIn('ok=6', h.format_icinga(report, 10, 30))
+        for r in report['regions'].values():
+            for s in r['satellites']:
+                self.assertIsNone(s['cluster_lag'])
+                self.assertIsNone(s['tcp_reachable'])
+
+    def test_missing_or_malformed_runtime_is_unknown(self):
+        for value in (None, 'false', 0):
+            endpoints, zones = self.fixtures()
+            endpoints['emea-sat-01']['connected'] = value
+            self.assertEqual(self.run_mock(endpoints, zones)['status'], 'UNKNOWN')
+
+    def test_missing_zone_or_membership_is_unknown(self):
+        endpoints, zones = self.fixtures()
+        zones['backup-emea']['endpoints'] = []
+        self.assertEqual(self.run_mock(endpoints, zones)['status'], 'UNKNOWN')
+        del zones['backup-emea']
+        self.assertEqual(self.run_mock(endpoints, zones)['status'], 'UNKNOWN')
+
+    def test_api_failure_json(self):
+        with patch.object(h, 'run_check', side_effect=h.CheckError('Master API unavailable')), \
+             contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(h.main(['--json']), 3)
+        report = json.loads(out.getvalue())
+        self.assertEqual(report['regions'], {})
+        self.assertEqual(report['status'], 'UNKNOWN')
+
+    def test_bad_arguments_json(self):
+        for args in (['--tcp-timeout', 'nan'], ['--api-url', 'http://localhost'],
+                     ['--lag-warning', '40'], ['--bad-argument']):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(h.main(['--json'] + args), 3)
+            self.assertEqual(json.loads(out.getvalue())['status'], 'UNKNOWN')
+
+    def test_tcp_failure_is_not_fatal(self):
+        with patch.object(h.socket, 'create_connection', side_effect=OSError):
+            self.assertEqual(h.test_tcp('example', 3), (False, None))
+
+    def test_exception_secret_not_exposed(self):
+        with patch.object(h, 'run_check', side_effect=ValueError('secret-password')), \
+             contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(h.main(['--json']), 3)
+        self.assertNotIn('secret-password', out.getvalue())
+
+
+if __name__ == '__main__':
+    unittest.main()
