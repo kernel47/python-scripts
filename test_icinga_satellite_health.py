@@ -88,6 +88,28 @@ class HealthTests(unittest.TestCase):
                 self.assertEqual(h.main(['--json'] + args), 3)
             self.assertEqual(json.loads(out.getvalue())['status'], 'UNKNOWN')
 
+    def test_web_output_preserves_metrics(self):
+        report = self.run_mock(*self.fixtures())
+        web = h.format_icinga(report, 10, 30)
+        self.assertIn("🟢 OK", web)
+        self.assertNotIn("\033", web)
+        self.assertEqual(web.splitlines()[0].split(" | ")[1],
+                         "ok=6 warning=0 critical=0 unknown=0")
+        self.assertEqual(h.web_status('WARNING'), '🟡 WARNING')
+        self.assertEqual(h.web_status('CRITICAL'), '🔴 CRITICAL')
+        self.assertEqual(h.web_status('UNKNOWN'), '🟣 UNKNOWN')
+
+    def test_web_output_error_and_json(self):
+        for args in ([], ['--json']):
+            with patch.object(h, 'run_check', side_effect=h.CheckError('API unavailable')), \
+                 contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(h.main(args), 3)
+            if '--json' in args:
+                self.assertEqual(json.loads(out.getvalue())['status'], 'UNKNOWN')
+                self.assertNotIn('🟣', out.getvalue())
+            else:
+                self.assertTrue(out.getvalue().startswith('🟣 UNKNOWN'))
+
     def test_tcp_failure_is_not_fatal(self):
         with patch.object(h.socket, 'create_connection', side_effect=OSError):
             self.assertEqual(h.test_tcp('example', 3), (False, None))

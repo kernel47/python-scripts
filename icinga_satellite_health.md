@@ -186,3 +186,16 @@ perfdata lag ; le plugin applique les seuils inclusifs demandés (`>=`).
 Aucun master Icinga n'est disponible dans l'environnement de développement : les
 tests locaux couvrent les règles et les réponses simulées, pas une validation
 réelle par `icinga2 daemon -C` ni un test TLS sur votre infrastructure.
+
+## Affichage dans le dashboard
+
+Les pastilles sont affichées par défaut, sans argument supplémentaire.
+Les statuts global, régionaux et individuels affichent des pastilles Unicode :
+🟢 OK, 🟡 WARNING, 🔴 CRITICAL, 🟣 UNKNOWN (erreur ou état indéterminé).
+Le texte reste présent pour ne pas dépendre uniquement de la couleur.
+Aucun code ANSI ni HTML n'est injecté. Le rendu coloré des pastilles dépend du
+navigateur et de ses polices emoji ; ce mode ne colore pas le texte lui-même.
+Les codes de retour et les perfdata restent inchangés ; `--json` ignore ce mode.
+La première ligne apparaît dans les listes ; les détails par région et satellite
+apparaissent dans la fiche du service. Une seule exécution représente toujours
+un seul service et un statut global.

@@ -192,6 +192,12 @@ def clean(value: str) -> str:
     return " ".join(value.split()).replace("|", "/")
 
 
+def web_status(status: str) -> str:
+    """Unicode status indicators; rendering depends on browser emoji fonts."""
+    icons = {"OK": "🟢", "WARNING": "🟡", "CRITICAL": "🔴", "UNKNOWN": "🟣"}
+    return f"{icons[status]} {status}"
+
+
 def format_icinga(report: Dict[str, Any], warning: float, critical: float) -> str:
     satellites = [s for r in report["regions"].values() for s in r["satellites"]]
     counts = {s: sum(x["status"] == s for x in satellites) for s in CODES}
@@ -204,7 +210,7 @@ def format_icinga(report: Dict[str, Any], warning: float, critical: float) -> st
             summary += f"; +{len(issues) - 2} other issue(s)"
     lines = []
     for region, data in report["regions"].items():
-        lines.append(f"{clean(region)}: {data['status']}")
+        lines.append(f"{clean(region)}: {web_status(data['status'])}")
         for s in data["satellites"]:
             # Hex encoding is collision-free, including punctuation in endpoint names.
             label = "ep_" + s["endpoint"].encode("utf-8").hex()
@@ -217,8 +223,8 @@ def format_icinga(report: Dict[str, Any], warning: float, critical: float) -> st
                 detail += f" - lag={s['cluster_lag']:.3f}s"
             else:
                 detail += " - lag unavailable"
-            lines.append(f"  {clean(s['name'])}: {s['status']} - {clean(detail)}")
-    return "\n".join([f"{report['status']} - {clean(summary)} | {' '.join(perf)}"] + lines)
+            lines.append(f"  {clean(s['name'])}: {web_status(s['status'])} - {clean(detail)}")
+    return "\n".join([f"{web_status(report['status'])} - {clean(summary)} | {' '.join(perf)}"] + lines)
 
 
 def format_json(report: Dict[str, Any]) -> str:
