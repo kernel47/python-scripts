@@ -99,6 +99,29 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(h.web_status('CRITICAL'), '🔴 CRITICAL')
         self.assertEqual(h.web_status('UNKNOWN'), '🟣 UNKNOWN')
 
+    def test_regional_tables_escape_names_and_keep_unknown_values(self):
+        report = self.run_mock(*self.fixtures())
+        satellite = report['regions']['EMEA']['satellites'][0]
+        satellite['hostname'] = '<script>alert(1)</script>'
+        output = h.format_icinga(report, 10, 30)
+        self.assertEqual(output.count('<table>'), 3)
+        self.assertEqual(output.count('</table>'), 3)
+        self.assertEqual(output.count('<td>Non testé</td>'), 6)
+        self.assertEqual(output.count('<td>N/D</td>'), 6)
+        self.assertNotIn('<script>', output)
+        self.assertIn('&lt;script&gt;', output)
+        self.assertNotIn('<table>', output.splitlines()[0])
+        self.assertEqual(output.count('|'), 1)
+        satellite['tcp_reachable'] = False
+        satellite['cluster_connected'] = False
+        satellite['tcp_latency_ms'] = 0.0
+        satellite['cluster_lag'] = 0.0
+        output = h.format_icinga(report, 10, 30)
+        self.assertIn('<td>Déconnecté</td>', output)
+        self.assertIn('<td>Indisponible</td>', output)
+        self.assertIn('<td>0.00 ms</td>', output)
+        self.assertIn('<td>0.00 s</td>', output)
+
     def test_web_output_error_and_json(self):
         for args in ([], ['--json']):
             with patch.object(h, 'run_check', side_effect=h.CheckError('API unavailable')), \

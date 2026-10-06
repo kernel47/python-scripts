@@ -193,9 +193,27 @@ Les pastilles sont affichées par défaut, sans argument supplémentaire.
 Les statuts global, régionaux et individuels affichent des pastilles Unicode :
 🟢 OK, 🟡 WARNING, 🔴 CRITICAL, 🟣 UNKNOWN (erreur ou état indéterminé).
 Le texte reste présent pour ne pas dépendre uniquement de la couleur.
-Aucun code ANSI ni HTML n'est injecté. Le rendu coloré des pastilles dépend du
+Aucun code ANSI n'est injecté. Le rendu coloré des pastilles dépend du
 navigateur et de ses polices emoji ; ce mode ne colore pas le texte lui-même.
 Les codes de retour et les perfdata restent inchangés ; `--json` ignore ce mode.
 La première ligne apparaît dans les listes ; les détails par région et satellite
 apparaissent dans la fiche du service. Une seule exécution représente toujours
 un seul service et un statut global.
+
+
+### Tableaux régionaux
+
+La sortie par défaut contient le résumé global en première ligne, suivi de trois
+tableaux HTML (EMEA, APAC, AMER) dans la sortie longue. Colonnes : Hostname,
+Statut, Cluster, TCP, Latence en ms et Lag en secondes. Le hostname provient du
+champ `host` configuré ; il est aussi présent sous `hostname` en JSON.
+Les diagnostics WARNING/CRITICAL/UNKNOWN apparaissent sous le tableau concerné.
+`Non testé`, `Inconnu`, `—` et `N/D` distinguent les données absentes des valeurs zéro.
+Les noms et diagnostics sont échappés HTML. Les perfdata restent uniquement sur
+la première ligne. Aucun argument supplémentaire n'est nécessaire.
+
+L'affichage en tableau nécessite que votre module Icinga Web rende le HTML de la
+sortie des plugins ; s'il l'échappe, les balises seront visibles. Le rendu réel est
+à vérifier dans la fiche du service sur votre dashboard. La liste des services
+ne montre généralement que le résumé. Les anciennes sorties illustratives
+ci-dessus décrivent les statuts ; les détails sont maintenant en tableaux.

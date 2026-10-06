@@ -4,6 +4,7 @@ import argparse
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 import json
+from html import escape
 import logging
 import math
 import os
@@ -61,6 +62,7 @@ class SatelliteResult:
     tcp_latency_ms: Optional[float] = None
     status: str = "UNKNOWN"
     message: str = "Not checked"
+    hostname: str = ""
 
 
 @contextmanager
@@ -210,20 +212,30 @@ def format_icinga(report: Dict[str, Any], warning: float, critical: float) -> st
             summary += f"; +{len(issues) - 2} other issue(s)"
     lines = []
     for region, data in report["regions"].items():
-        lines.append(f"{clean(region)}: {web_status(data['status'])}")
+        lines.append(f"<h3>{escape(clean(region))} — {web_status(data['status'])}</h3>")
+        rows = ["<table><thead><tr>" + "".join(
+            f"<th>{heading}</th>" for heading in
+            ("Hostname", "Statut", "Cluster", "TCP", "Latence", "Lag")) + "</tr></thead><tbody>"]
+        details = []
         for s in data["satellites"]:
-            # Hex encoding is collision-free, including punctuation in endpoint names.
             label = "ep_" + s["endpoint"].encode("utf-8").hex()
-            detail = s["message"]
-            if s["tcp_latency_ms"] is not None:
-                perf.append(f"'{label}_latency'={s['tcp_latency_ms']:.3f}ms;;;0;")
-                detail += f" - tcp={s['tcp_latency_ms']:.3f}ms"
-            if s["cluster_lag"] is not None:
-                perf.append(f"'{label}_lag'={s['cluster_lag']:.3f}s;{warning};{critical};0;")
-                detail += f" - lag={s['cluster_lag']:.3f}s"
-            else:
-                detail += " - lag unavailable"
-            lines.append(f"  {clean(s['name'])}: {web_status(s['status'])} - {clean(detail)}")
+            latency, lag = s["tcp_latency_ms"], s["cluster_lag"]
+            if latency is not None:
+                perf.append(f"'{label}_latency'={latency:.3f}ms;;;0;")
+            if lag is not None:
+                perf.append(f"'{label}_lag'={lag:.3f}s;{warning};{critical};0;")
+            cluster = {True: "Connecté", False: "Déconnecté", None: "Inconnu"}[s["cluster_connected"]]
+            tcp = {True: "Accessible", False: "Indisponible", None: "Non testé"}[s["tcp_reachable"]]
+            cells = (s.get("hostname") or s["endpoint"], web_status(s["status"]),
+                     cluster, tcp, f"{latency:.2f} ms" if latency is not None else "—",
+                     f"{lag:.2f} s" if lag is not None else "N/D")
+            rows.append("<tr>" + "".join(f"<td>{escape(clean(cell))}</td>" for cell in cells) + "</tr>")
+            if s["status"] != "OK":
+                details.append(f"<li>{escape(clean(s['name']))}: {escape(clean(s['message']))}</li>")
+        rows.append("</tbody></table>")
+        lines.append("".join(rows))
+        if details:
+            lines.append("<ul>" + "".join(details) + "</ul>")
     return "\n".join([f"{web_status(report['status'])} - {clean(summary)} | {' '.join(perf)}"] + lines)
 
 
@@ -300,7 +312,7 @@ def run_check(a: argparse.Namespace) -> Dict[str, Any]:
         api.close()
     for region, satellites in SATELLITES.items():
         for s in satellites:
-            result = SatelliteResult(s["name"], region, s["endpoint"], s["zone"])
+            result = SatelliteResult(s["name"], region, s["endpoint"], s["zone"], hostname=s["host"])
             attrs = endpoints.get(s["endpoint"])
             zone = zones.get(s["zone"])
             if attrs is None or zone is None:
