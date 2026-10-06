@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import re
 import unittest
 from unittest.mock import patch
 
@@ -104,6 +105,7 @@ class HealthTests(unittest.TestCase):
         satellite = report['regions']['EMEA']['satellites'][0]
         satellite['hostname'] = '<script>alert(1)</script>'
         output = h.format_icinga(report, 10, 30)
+        output = re.sub(r' style="[^"]*"', "", output)
         self.assertEqual(output.count('<table>'), 3)
         self.assertEqual(output.count('</table>'), 3)
         self.assertEqual(output.count('<td>Non testé</td>'), 6)
@@ -117,6 +119,7 @@ class HealthTests(unittest.TestCase):
         satellite['tcp_latency_ms'] = 0.0
         satellite['cluster_lag'] = 0.0
         output = h.format_icinga(report, 10, 30)
+        output = re.sub(r' style="[^"]*"', "", output)
         self.assertIn('<td>Déconnecté</td>', output)
         self.assertIn('<td>Indisponible</td>', output)
         self.assertIn('<td>0.00 ms</td>', output)

@@ -210,11 +210,12 @@ def format_icinga(report: Dict[str, Any], warning: float, critical: float) -> st
         summary += "; " + "; ".join(issues[:2])
         if len(issues) > 2:
             summary += f"; +{len(issues) - 2} other issue(s)"
+    cell_style = "font-size:16px;line-height:1.5;padding:8px 12px;text-align:left;"
     lines = []
     for region, data in report["regions"].items():
-        lines.append(f"<h3>{escape(clean(region))} — {web_status(data['status'])}</h3>")
+        lines.append(f'<h3 style="font-size:18px;margin:16px 0 8px;">{escape(clean(region))} — {web_status(data["status"])}</h3>')
         rows = ["<table><thead><tr>" + "".join(
-            f"<th>{heading}</th>" for heading in
+            f'<th style="{cell_style}">{heading}</th>' for heading in
             ("Hostname", "Statut", "Cluster", "TCP", "Latence", "Lag")) + "</tr></thead><tbody>"]
         details = []
         for s in data["satellites"]:
@@ -229,7 +230,7 @@ def format_icinga(report: Dict[str, Any], warning: float, critical: float) -> st
             cells = (s.get("hostname") or s["endpoint"], web_status(s["status"]),
                      cluster, tcp, f"{latency:.2f} ms" if latency is not None else "—",
                      f"{lag:.2f} s" if lag is not None else "N/D")
-            rows.append("<tr>" + "".join(f"<td>{escape(clean(cell))}</td>" for cell in cells) + "</tr>")
+            rows.append("<tr>" + "".join(f'<td style="{cell_style}">{escape(clean(cell))}</td>' for cell in cells) + "</tr>")
             if s["status"] != "OK":
                 details.append(f"<li>{escape(clean(s['name']))}: {escape(clean(s['message']))}</li>")
         rows.append("</tbody></table>")

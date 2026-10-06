@@ -217,3 +217,7 @@ sortie des plugins ; s'il l'échappe, les balises seront visibles. Le rendu rée
 à vérifier dans la fiche du service sur votre dashboard. La liste des services
 ne montre généralement que le résumé. Les anciennes sorties illustratives
 ci-dessus décrivent les statuts ; les détails sont maintenant en tableaux.
+
+Les cellules et en-têtes utilisent une police de 16 px, avec un espacement de
+8 px vertical et 12 px horizontal ; les titres régionaux sont en 18 px.
+Ces styles dépendent de la conservation des attributs HTML `style` par le dashboard.
